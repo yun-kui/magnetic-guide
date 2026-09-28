@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地磁位置資料建立 (管理者端)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🛠️ 建立展物地磁資料</h1>
+        <div id="status" class="status-box">請點擊下方按鈕啟動感測器以讀取當前磁場...</div>
+        
+        <div class="card">
+            <h3>目前即時磁場數值</h3>
+            <p>X 軸: <span id="val-x">0.00</span></p>
+            <p>Y 軸: <span id="val-y">0.00</span></p>
+            <p>Z 軸: <span id="val-z">0.00</span></p>
+        </div>
+
+        <div class="card" style="text-align: left;">
+            <label>展物編號 (id):</label>
+            <input type="text" id="exhibit-id" placeholder="例如: exhibit_02" style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;">
+
+            <label>展物名稱 (name):</label>
+            <input type="text" id="exhibit-name" placeholder="例如: 宋代瓷器" style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;">
+
+            <label>容許誤差 (tolerance):</label>
+            <input type="number" id="exhibit-tolerance" value="0.50" step="0.05" style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;">
+
+            <label>導覽內容 (content):</label>
+            <textarea id="exhibit-content" rows="3" placeholder="請輸入文物的詳細介紹..." style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;"></textarea>
+
+            <button id="submit-btn" onclick="sendDataToSheet()" style="background-color: #2196F3; margin-top: 10px;">記錄並上傳至試算表</button>
+        </div>
+
+        <button id="start-btn" onclick="requestSensors()">1. 點擊啟動感測器</button>
+    </div>
+
+    <script>
+        // ⚠️ 請換成你的 Google Apps Script 網頁應用程式網址 (跟 index.html 用同一支即可)
+        const API_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL";
+        
+        let currentNormX = 0;
+        let currentNormY = 0;
+        let currentNormZ = 0;
+
+        // 1. 啟動感測器
+        function requestSensors() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission().then(response => {
+                    if (response === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation, true);
+                        document.getElementById('status').innerText = "感測器已啟動，請站在文物前記錄數值。";
+                        document.getElementById('start-btn').style.display = 'none';
+                    } else {
+                        alert("需要授權感測器！");
+                    }
+                }).catch(console.error);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+                document.getElementById('status').innerText = "感測器已啟動，請站在文物前記錄數值。";
+                document.getElementById('start-btn').style.display = 'none';
+            }
+        }
+
+        // 2. 接收並正規化磁力數據
+        function handleOrientation(event) {
+            let rawX = event.beta ? event.beta / 90 : 0;
+            let rawY = event.gamma ? event.gamma / 90 : 0;
+            let rawZ = event.alpha ? event.alpha / 360 : 0;
+
+            let magnitude = Math.sqrt(rawX * rawX + rawY * rawY + rawZ * rawZ);
+            currentNormX = magnitude ? parseFloat((rawX / magnitude).toFixed(2)) : 0;
+            currentNormY = magnitude ? parseFloat((rawY / magnitude).toFixed(2)) : 0;
+            currentNormZ = magnitude ? parseFloat((rawZ / magnitude).toFixed(2)) : 0;
+
+            document.getElementById('val-x').innerText = currentNormX;
+            document.getElementById('val-y').innerText = currentNormY;
+            document.getElementById('val-z').innerText = currentNormZ;
+        }
+
+        // 3. 將表單資料與當前磁場 POST 送出到 Google 試算表
+        async function sendDataToSheet() {
+            let id = document.getElementById('exhibit-id').value;
+            let name = document.getElementById('exhibit-name').value;
+            let tolerance = document.getElementById('exhibit-tolerance').value;
+            let content = document.getElementById('exhibit-content').value;
+
+            if (!id || !name) {
+                alert("請填寫展物編號與名稱！");
+                return;
+            }
+
+            let postData = {
+                id: id,
+                name: name,
+                wifi_rssi: -65, // 預留欄位
+                ble_uuid: "uuid_admin", // 預留欄位
+                mag_x: currentNormX,
+                mag_y: currentNormY,
+                mag_z: currentNormZ,
+                tolerance: parseFloat(tolerance),
+                content: content
+            };
+
+            document.getElementById('status').innerText = "正在上傳資料至 Google 試算表...";
+
+            try {
+                let response = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify(postData)
+                });
+                let result = await response.json();
+                if(result.status === "success") {
+                    alert("成功新增展物地磁資料！");
+                    document.getElementById('status').innerText = "上傳成功！可以移動到下一個文物。";
+                } else {
+                    alert("上傳失敗，請檢查。");
+                }
+            } catch (error) {
+                console.error(error);
+                alert("連線錯誤，請檢查主控台。");
+            }
+        }
+    </script>
+</body>
+</html>
