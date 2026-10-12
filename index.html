@@ -12,7 +12,7 @@
         <div id="status" class="status-box">正在初始化感測器與載入資料...</div>
         
         <div class="card">
-            <h3>當前磁場數值 (已正規化)</h3>
+            <h3>真正磁力計數值（μT）</h3>
             <p>X 軸: <span id="val-x">0.00</span></p>
             <p>Y 軸: <span id="val-y">0.00</span></p>
             <p>Z 軸: <span id="val-z">0.00</span></p>
@@ -27,96 +27,73 @@
     </div>
 
     <script>
-        // ⚠️ 請將這裡替換成你在第一步取得的 Google Apps Script 網頁應用程式網址
-        const API_URL = "https://script.google.com/macros/s/AKfycbzwjQ8iJ4CvFyD8-xZpkH0DjzML8Dz2AR101hW6wxQwQQaYcSs3S6RS5tqN4eq6BpaU-g/exec";
-        
-        let exhibitDatabase = [];
+const API_URL = "https://script.google.com/macros/s/AKfycbzwjQ8iJ4CvFyD8-xZpkH0DjzML8Dz2AR101hW6wxQwQQaYcSs3S6RS5tqN4eq6BpaU-g/exec";
+let sensor = null, latest = null, samples = [];
+const $ = id => document.getElementById(id);
+function status(msg) { $('status').textContent = msg; }
+async function requestSensors() {
+  if (!window.isSecureContext || !('Magnetometer' in window)) {
+    status('此瀏覽器無法讀取真正的磁力計。請使用支援 Magnetometer API 的 Android 瀏覽器，或改用原生 App。');
+    return;
+  }
+  try {
+    sensor = new Magnetometer({frequency: 10});
+    sensor.addEventListener('reading', () => {
+      const v = [sensor.x,sensor.y,sensor.z];
+      if (!v.every(Number.isFinite)) return;
+      latest = v;
+      samples.push(v);
+      if (samples.length > 30) samples.shift();
+      ['x','y','z'].forEach((k,i) => $('val-'+k).textContent = v[i].toFixed(4));
+      onReading(v);
+    });
+    sensor.addEventListener('error', e => status('磁力計讀取失敗：'+(e.error?.message || '權限或硬體不支援')));
+    sensor.start();
+    status('磁力計已啟動，顯示單位為 μT；請保持手機姿態一致。');
+    $('start-btn').disabled = true;
+  } catch (e) { status('無法啟動磁力計：'+e.message); }
+}
+function onReading(v) {}
+function averageSamples() {
+  if (samples.length < 10) return null;
+  return [0,1,2].map(i => Number((samples.reduce((s,v)=>s+v[i],0)/samples.length).toFixed(4)));
+}
 
-        // 1. 載入 Google 試算表的展物資料
-        async function loadDatabase() {
-            try {
-                let response = await fetch(API_URL);
-                exhibitDatabase = await response.json();
-                document.getElementById('status').innerText = "展物資料庫載入成功！請點擊下方按鈕啟動感測器。";
-            } catch (error) {
-                document.getElementById('status').innerText = "載入資料失敗，請檢查 API 網址。";
-                console.error(error);
-            }
-        }
-        loadDatabase();
-
-        // 2. 請求 iOS / Android 授權並監聽感測器
-        function requestSensors() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                // iOS 13+ 權限請求
-                DeviceOrientationEvent.requestPermission().then(response => {
-                    if (response === 'granted') {
-                        window.addEventListener('deviceorientation', handleOrientation, true);
-                        document.getElementById('status').innerText = "感測器已啟動，正在感應環境磁場...";
-                        document.getElementById('start-btn').style.display = 'none';
-                    } else {
-                        alert("需要授權感測器才能使用自動導覽！");
-                    }
-                }).catch(console.error);
-            } else {
-                // Android 或其他支援的瀏覽器
-                window.addEventListener('deviceorientation', handleOrientation, true);
-                document.getElementById('status').innerText = "感測器已啟動，正在感應環境磁場...";
-                document.getElementById('start-btn').style.display = 'none';
-            }
-        }
-
-        // 3. 接收手機磁力/方向數據並進行「正規化」與「比對」
-        function handleOrientation(event) {
-            // 模擬取樣數值（alpha, beta, gamma 或 磁力計向量）
-            // 實務上若有專用 Magnetometer API 可替換，這裡示範透過方向與模擬數據進行正規化
-            let rawX = event.beta ? event.beta / 90 : 0;   // 簡易歸一化到 [-1, 1]
-            let rawY = event.gamma ? event.gamma / 90 : 0; 
-            let rawZ = event.alpha ? event.alpha / 360 : 0;
-
-            // 進行向量正規化 (Normalization: 讓數值穩定、消除雜訊)
-            let magnitude = Math.sqrt(rawX * rawX + rawY * rawY + rawZ * rawZ);
-            let normX = magnitude ? (rawX / magnitude).toFixed(2) : 0;
-            let normY = magnitude ? (rawY / magnitude).toFixed(2) : 0;
-            let normZ = magnitude ? (rawZ / magnitude).toFixed(2) : 0;
-
-            // 畫面上即時顯示
-            document.getElementById('val-x').innerText = normX;
-            document.getElementById('val-y').innerText = normY;
-            document.getElementById('val-z').innerText = normZ;
-
-            // 比對資料庫尋找最近的展物
-            checkNearestExhibit(parseFloat(normX), parseFloat(normY), parseFloat(normZ));
-        }
-
-        // 4. 比對演算法（利用歐幾里得距離與容許誤差）
-        function checkNearestExhibit(x, y, z) {
-            let matched = null;
-            let minDistance = 999;
-
-            for (let exhibit of exhibitDatabase) {
-                let dx = x - parseFloat(exhibit.mag_x);
-                let dy = y - parseFloat(exhibit.mag_y);
-                let dz = z - parseFloat(exhibit.mag_z);
-                let distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-                // 如果距離小於試算表設定的 tolerance（容許誤差）
-                if (distance <= parseFloat(exhibit.tolerance) && distance < minDistance) {
-                    minDistance = distance;
-                    matched = exhibit;
-                }
-            }
-
-            let guideBox = document.getElementById('guide-section');
-            if (matched) {
-                guideBox.style.display = 'block';
-                document.getElementById('exhibit-title').innerText = "📍 " + matched.name;
-                document.getElementById('exhibit-content').innerText = matched.content;
-            } else {
-                // 離開範圍可以選擇隱藏或顯示尋找中
-                // guideBox.style.display = 'none';
-            }
-        }
+let exhibitDatabase=[];
+async function loadDatabase() {
+  try {
+    const r=await fetch(API_URL);
+    if(!r.ok) throw Error('HTTP '+r.status);
+    const data=await r.json();
+    // 只比對新版真正磁力計資料，避免舊角度資料混入
+    exhibitDatabase=data.filter(x=>x.data_type==='magnetometer_uT' && [x.mag_x,x.mag_y,x.mag_z].every(v=>v!=='' && Number.isFinite(Number(v))));
+    status('載入 '+exhibitDatabase.length+' 筆真正地磁資料，請啟動感測器。');
+  } catch(e) {status('資料庫載入失敗：'+e.message);}
+}
+let lastPoint='', consecutive=0;
+function onReading() {
+  const v=averageSamples();
+  if(!v || !exhibitDatabase.length) return;
+  let best=null, distance=Infinity;
+  for(const row of exhibitDatabase) {
+    const d=Math.hypot(...v.map((x,i)=>x-Number([row.mag_x,row.mag_y,row.mag_z][i])));
+    if(d<distance) {best=row;distance=d;}
+  }
+  const tolerance=Number(best?.tolerance);
+  if(!best || !(tolerance>0) || distance>tolerance) {
+    lastPoint='';consecutive=0;
+    $('guide-section').style.display='none';
+    return;
+  }
+  const point=String(best.id).split('-')[0];
+  if(point===lastPoint) consecutive++; else {lastPoint=point;consecutive=1;}
+  if(consecutive<5) return;
+  $('guide-section').style.display='block';
+  $('exhibit-title').textContent='📍 '+(best.name||best.id);
+  $('exhibit-content').textContent=(best.content||'')+'
+距離：'+distance.toFixed(2)+' μT';
+}
+loadDatabase();
     </script>
 </body>
 </html>
