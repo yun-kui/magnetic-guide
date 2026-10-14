@@ -2,126 +2,96 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport"
-        content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>地磁資料採集系統</title>
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-<main>
-  <h1>地磁資料採集系統</h1>
-  <p class="muted">
-    真正磁力計 μT · 3 秒採集 · 10 筆批次上傳
-  </p>
+  <main>
+    <h1>地磁資料採集系統</h1>
+    <p class="hint">真實磁場數據採集｜3 秒 10 筆</p>
 
-  <section class="card">
-    <label for="point">定位點編號</label>
-    <input
-      id="point"
-      inputmode="numeric"
-      placeholder="例如 21"
-      autocomplete="off"
-    >
-    <p class="muted">
-      只需輸入數字，方向及資料編號由程式判斷。
-    </p>
-  </section>
+    <section class="card">
+      <h2>1. 定位點設定</h2>
+      <label for="point">定位點編號</label>
+      <input id="point" type="text"
+             inputmode="numeric"
+             placeholder="例如：21">
+      <p class="hint">
+        輸入 21，方向為北方時，自動產生 21-1。
+      </p>
+    </section>
 
-  <section class="card">
-    <h2>即時感測器</h2>
+    <section class="card">
+      <h2>2. 感測器狀態</h2>
 
-    <div class="compass">
-      <span class="north">N</span>
-      <span class="needle" id="needle">▲</span>
-    </div>
+      <p>裝置：<strong id="device">偵測中</strong></p>
+      <p>磁力計：<strong id="support">尚未檢查</strong></p>
 
-    <p style="text-align:center">
-      <strong id="heading">方向未確認</strong>
-      · <span id="degrees">--°</span>
-    </p>
-
-    <p style="text-align:center">
-      預計資料 ID：
-      <strong id="recordId">--</strong>
-    </p>
-
-    <div class="row">
-      <div class="metric">
-        X
-        <strong id="x">--</strong>
-        <small>μT</small>
+      <div class="compass">
+        <span class="north">N</span>
+        <span id="needle" class="needle">▲</span>
       </div>
 
-      <div class="metric">
-        Y
-        <strong id="y">--</strong>
-        <small>μT</small>
+      <div class="center">
+        <h2 id="heading">方向未確認</h2>
+        <p id="degrees">--°</p>
+        <p>資料 ID：<strong id="recordId">--</strong></p>
       </div>
 
-      <div class="metric">
-        Z
-        <strong id="z">--</strong>
-        <small>μT</small>
+      <div class="metrics">
+        <div>X <strong id="x">--</strong><small>μT</small></div>
+        <div>Y <strong id="y">--</strong><small>μT</small></div>
+        <div>Z <strong id="z">--</strong><small>μT</small></div>
       </div>
-    </div>
 
-    <p>
       <button id="startSensors">啟動感測器</button>
-    </p>
+      <p id="sensorStatus" class="status">尚未啟動</p>
 
-    <p class="status" id="sensorStatus">
-      尚未啟動
-    </p>
+      <p class="hint">
+        手機請盡量保持平放，遠離磁鐵與大型金屬。
+        若瀏覽器無法提供真正磁場數值，系統不會產生假資料。
+      </p>
+    </section>
 
-    <p class="muted hint">
-      請保持手機平放、遠離磁鐵及大型金屬物。
-      方向必須是相對北方的羅盤角度，
-      不能把一般 alpha 旋轉角度直接當方位角。
-    </p>
-  </section>
+    <section class="card">
+      <h2>3. 採集與上傳</h2>
 
-  <section class="card">
-    <h2>採集資料</h2>
+      <p>方向對應：北 1、東 2、南 3、西 4。</p>
 
-    <p>
-      按一次收集 3 秒，取其中 10 筆有效磁場讀數。
-      採集時請固定手機位置和朝向。
-    </p>
+      <button id="collect" disabled>
+        開始採集（3 秒 / 10 筆）
+      </button>
 
-    <button id="collect" disabled>
-      開始採集（3 秒 / 10 筆）
-    </button>
+      <button id="upload" class="secondary" disabled>
+        上傳 10 筆
+      </button>
 
-    <button id="upload" class="secondary" disabled>
-      上傳 10 筆
-    </button>
+      <p id="collectStatus" class="status">
+        等待感測器啟動
+      </p>
 
-    <p class="status" id="collectStatus">
-      等待感測器啟動
-    </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>方向</th>
+              <th>X</th>
+              <th>Y</th>
+              <th>Z</th>
+              <th>強度</th>
+            </tr>
+          </thead>
+          <tbody id="preview"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
-    <div class="scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>方向</th>
-            <th>X μT</th>
-            <th>Y μT</th>
-            <th>Z μT</th>
-            <th>強度 μT</th>
-          </tr>
-        </thead>
-        <tbody id="preview"></tbody>
-      </table>
-    </div>
-  </section>
-</main>
-
-<script src="config.js"></script>
-<script src="magnetometer.js"></script>
-<script src="collector.js"></script>
+  <script src="config.js"></script>
+  <script src="magnetometer.js"></script>
+  <script src="collector.js"></script>
 </body>
 </html>
