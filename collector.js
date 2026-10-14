@@ -1,275 +1,285 @@
 
 'use strict';
 
-$('collect').addEventListener('click', async () => {
-  if (collecting) return;
+$('collect').addEventListener(
+  'click',
+  async () => {
+    if (collecting) return;
 
-  const point = $('point').value.trim();
+    const point = $('point').value.trim();
 
-  if (!/^\d+$/.test(point)) {
-    status(
-      'collectStatus',
-      '請先輸入數字定位點，例如 21',
-      'bad'
-    );
-    return;
-  }
+    if (!/^\d+$/.test(point)) {
+      status(
+        'collectStatus',
+        '請輸入定位點編號，例如 21。',
+        'bad'
+      );
+      return;
+    }
 
-  const d = currentDirection();
+    const direction = currentDirection();
 
-  if (!d) {
-    status(
-      'collectStatus',
-      '無法確認北、東、南、西。' +
-      '請將手機對準方向，並確認瀏覽器提供絕對羅盤角度。',
-      'bad'
-    );
-    return;
-  }
+    if (!direction) {
+      status(
+        'collectStatus',
+        '無法確認北、東、南、西。' +
+        '請對準方向後再試。',
+        'bad'
+      );
+      return;
+    }
 
-  if (
-    !latest ||
-    Date.now() - latest.time > 1500
-  ) {
-    status(
-      'collectStatus',
-      '尚未收到新鮮磁力計數值',
-      'bad'
-    );
-    return;
-  }
+    if (
+      !latest ||
+      Date.now() - latest.time > 1500
+    ) {
+      status(
+        'collectStatus',
+        '磁力計沒有提供最新讀數。',
+        'bad'
+      );
+      return;
+    }
 
-  const recent = headingHistory.filter(
-    x => Date.now() - x.time < 1000
-  );
-
-  if (
-    recent.length < 2 ||
-    recent.some(
-      x => directionFor(x.deg)?.code !== d.code
-    )
-  ) {
-    status(
-      'collectStatus',
-      '方向尚未穩定，請固定手機後再試',
-      'bad'
-    );
-    return;
-  }
-
-  lockedDirection = d;
-  samples = [];
-  collected = [];
-  collectionHeadingHistory = [];
-  collecting = true;
-
-  $('collect').disabled = true;
-  $('upload').disabled = true;
-  $('preview').innerHTML = '';
-
-  for (
-    let second = 3;
-    second >= 1;
-    second--
-  ) {
-    status(
-      'collectStatus',
-      '採集中…剩餘 ' + second + ' 秒'
+    const recent = headingHistory.filter(
+      item => Date.now() - item.time < 1000
     );
 
-    await wait(1000);
-  }
+    if (
+      recent.length < 2 ||
+      recent.some(
+        item =>
+          directionFor(item.deg)?.code !==
+          direction.code
+      )
+    ) {
+      status(
+        'collectStatus',
+        '方向尚未穩定，請固定手機。',
+        'bad'
+      );
+      return;
+    }
 
-  collecting = false;
+    lockedDirection = direction;
 
-  const stable = collectionHeadingHistory;
+    samples = [];
+    collected = [];
+    collectionHeadingHistory = [];
+    collecting = true;
 
-  const orientationValid =
-    stable.length >= 3 &&
-    stable.every(
-      x =>
-        directionFor(x.deg)?.code ===
-        lockedDirection.code
+    $('collect').disabled = true;
+    $('upload').disabled = true;
+    $('preview').innerHTML = '';
+
+    for (let i = 3; i >= 1; i--) {
+      status(
+        'collectStatus',
+        '正在採集…剩餘 ' + i + ' 秒'
+      );
+
+      await wait(1000);
+    }
+
+    collecting = false;
+
+    const directionStable =
+      collectionHeadingHistory.length >= 3 &&
+      collectionHeadingHistory.every(
+        item =>
+          directionFor(item.deg)?.code ===
+          lockedDirection.code
+      ) &&
+      currentDirection()?.code ===
+        lockedDirection.code;
+
+    if (!directionStable) {
+      status(
+        'collectStatus',
+        '採集期間方向不穩定或方向讀數中斷，' +
+        '本次資料已取消。',
+        'bad'
+      );
+
+      $('collect').disabled = false;
+      return;
+    }
+
+    if (samples.length < 10) {
+      status(
+        'collectStatus',
+        '3 秒內只取得 ' +
+        samples.length +
+        ' 筆有效磁場數值，' +
+        '未達 10 筆，請重試。',
+        'bad'
+      );
+
+      $('collect').disabled = false;
+      return;
+    }
+
+    // 從實際採集到的讀數中均勻挑出 10 筆
+    const selected = Array.from(
+      { length: 10 },
+      (_, index) => {
+        const position = Math.floor(
+          index * (samples.length - 1) / 9
+        );
+
+        return samples[position];
+      }
     );
 
-  if (
-    !orientationValid ||
-    !currentDirection() ||
-    currentDirection().code !==
-      lockedDirection.code
-  ) {
-    status(
-      'collectStatus',
-      '採集期間方向不穩定或羅盤讀數中斷，' +
-      '已取消本次採集',
-      'bad'
-    );
+    collected = selected.map(item => {
+      const magnitude = Math.hypot(
+        item.x,
+        item.y,
+        item.z
+      );
 
-    $('collect').disabled = false;
-    return;
-  }
+      return {
+        id:
+          point + '-' +
+          lockedDirection.number,
 
-  if (samples.length < 10) {
-    status(
-      'collectStatus',
-      '3 秒內只收到 ' +
-      samples.length +
-      ' 筆有效讀數，未達 10 筆，請重試',
-      'bad'
-    );
+        direction:
+          lockedDirection.code,
 
-    $('collect').disabled = false;
-    return;
-  }
+        mag_x:
+          Number(item.x.toFixed(4)),
 
-  // 從實際收到的讀數中平均分布選取 10 筆
-  const selected = Array.from(
-    { length: 10 },
-    (_, i) =>
-      samples[
-        Math.floor(
-          i * (samples.length - 1) / 9
-        )
-      ]
-  );
+        mag_y:
+          Number(item.y.toFixed(4)),
 
-  collected = selected.map(s => ({
-    id:
-      point + '-' +
-      lockedDirection.number,
+        mag_z:
+          Number(item.z.toFixed(4)),
 
-    direction:
-      lockedDirection.code,
+        magnitude:
+          Number(magnitude.toFixed(4)),
 
-    mag_x:
-      Number(s.x.toFixed(4)),
+        timestamp:
+          new Date(item.time).toISOString()
+      };
+    });
 
-    mag_y:
-      Number(s.y.toFixed(4)),
+    // 顯示預覽表格
+    for (const record of collected) {
+      const tr = document.createElement('tr');
 
-    mag_z:
-      Number(s.z.toFixed(4)),
-
-    magnitude:
-      Number(
-        Math.hypot(s.x, s.y, s.z)
-          .toFixed(4)
-      ),
-
-    timestamp:
-      new Date(s.time).toISOString()
-  }));
-
-  for (const r of collected) {
-    const tr = document.createElement('tr');
-
-    for (
-      const k of [
+      const fields = [
         'id',
         'direction',
         'mag_x',
         'mag_y',
         'mag_z',
         'magnitude'
-      ]
-    ) {
-      const td = document.createElement('td');
-      td.textContent = r[k];
-      tr.appendChild(td);
-    }
+      ];
 
-    $('preview').appendChild(tr);
-  }
+      for (const field of fields) {
+        const td = document.createElement('td');
+        td.textContent = record[field];
+        tr.appendChild(td);
+      }
 
-  status(
-    'collectStatus',
-    '成功取得 10 筆真實磁場讀數，ID：' +
-    collected[0].id +
-    '。請確認後上傳。',
-    'good'
-  );
-
-  $('upload').disabled = false;
-  $('collect').disabled = false;
-});
-
-$('upload').addEventListener('click', async () => {
-  const url =
-    window.GEOMAG_CONFIG?.API_URL || '';
-
-  if (
-    !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/.test(url)
-  ) {
-    status(
-      'collectStatus',
-      '請填入有效的 Apps Script /exec 網址',
-      'bad'
-    );
-    return;
-  }
-
-  if (collected.length !== 10) {
-    status(
-      'collectStatus',
-      '沒有可上傳的 10 筆資料',
-      'bad'
-    );
-    return;
-  }
-
-  $('upload').disabled = true;
-
-  status(
-    'collectStatus',
-    '正在上傳 10 筆…'
-  );
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type':
-          'text/plain;charset=utf-8'
-      },
-      body: JSON.stringify({
-        action: 'batch_insert',
-        records: collected
-      }),
-      redirect: 'follow'
-    });
-
-    const result = await response.json();
-
-    if (
-      !response.ok ||
-      result.status !== 'success' ||
-      result.inserted !== 10
-    ) {
-      throw new Error(
-        result.message ||
-        '伺服器未確認寫入 10 筆'
-      );
+      $('preview').appendChild(tr);
     }
 
     status(
       'collectStatus',
-      'Google 試算表確認成功寫入 10 筆！',
+      '已取得 10 筆真實磁場數據。' +
+      '資料 ID：' +
+      collected[0].id +
+      '，可以上傳。',
       'good'
     );
 
-    collected = [];
+    $('upload').disabled = false;
+    $('collect').disabled = false;
+  }
+);
 
-  } catch (e) {
+$('upload').addEventListener(
+  'click',
+  async () => {
+    const url =
+      window.GEOMAG_CONFIG?.API_URL || '';
+
+    if (
+      !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec(?:\?.*)?$/.test(url)
+    ) {
+      status(
+        'collectStatus',
+        '請先在 config.js 設定 Apps Script 網址。',
+        'bad'
+      );
+      return;
+    }
+
+    if (collected.length !== 10) {
+      status(
+        'collectStatus',
+        '目前沒有完整的 10 筆資料。',
+        'bad'
+      );
+      return;
+    }
+
+    $('upload').disabled = true;
+
     status(
       'collectStatus',
-      '無法確認上傳成功：' +
-      e.message +
-      '。請先檢查試算表是否已新增 10 筆，' +
-      '避免重複上傳。',
-      'bad'
+      '正在上傳 10 筆資料…'
     );
-  } finally {
-    $('upload').disabled =
-      collected.length !== 10;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({
+          action: 'batch_insert',
+          records: collected
+        }),
+        redirect: 'follow'
+      });
+
+      const result = await response.json();
+
+      if (
+        !response.ok ||
+        result.status !== 'success' ||
+        result.inserted !== 10
+      ) {
+        throw new Error(
+          result.message ||
+          '伺服器未確認寫入成功'
+        );
+      }
+
+      status(
+        'collectStatus',
+        '上傳成功！已寫入 Google 試算表 10 筆。',
+        'good'
+      );
+
+      collected = [];
+
+    } catch (error) {
+      status(
+        'collectStatus',
+        '無法確認上傳結果：' +
+        error.message +
+        '。請先檢查 Google 試算表，' +
+        '避免重複上傳。',
+        'bad'
+      );
+
+    } finally {
+      $('upload').disabled =
+        collected.length !== 10;
+    }
   }
-});
+);
