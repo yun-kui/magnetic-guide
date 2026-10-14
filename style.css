@@ -1,58 +1,151 @@
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: #f4f7f6;
-    margin: 0;
-    padding: 20px;
-    color: #333;
+
+:root {
+  font-family: system-ui, -apple-system,
+    'Noto Sans TC', sans-serif;
+  color: #172338;
+  background: #f4f7fb;
 }
-.container {
-    max-width: 400px;
-    margin: 0 auto;
-    text-align: center;
+
+* {
+  box-sizing: border-box;
 }
+
+main {
+  max-width: 760px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
 h1 {
-    font-size: 1.5rem;
-    color: #2c3e50;
+  font-size: 1.6rem;
 }
-.status-box {
-    background: #e3f2fd;
-    color: #0d47a1;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    font-size: 0.9rem;
-}
+
 .card {
-    background: white;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    margin-bottom: 15px;
-    text-align: left;
+  background: white;
+  border-radius: 15px;
+  padding: 20px;
+  margin: 14px 0;
+  box-shadow: 0 2px 12px #19345b12;
 }
-.guide-box {
-    background: #e8f5e9;
-    border: 2px solid #4caf50;
-    padding: 15px;
-    border-radius: 10px;
-    margin-bottom: 15px;
-    text-align: left;
-    animation: fadeIn 0.5s;
+
+label {
+  display: block;
+  font-weight: 650;
+  margin: 12px 0 6px;
 }
+
+input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cad3e0;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
 button {
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    padding: 12px 20px;
-    font-size: 1rem;
-    border-radius: 8px;
-    cursor: pointer;
-    width: 100%;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: #156bc2;
+  color: white;
+  font-size: 1rem;
+  font-weight: 650;
+  cursor: pointer;
 }
-button:active {
-    background-color: #388e3c;
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+
+.secondary {
+  background: #e8eef7;
+  color: #1e3555;
+}
+
+.muted {
+  color: #64748b;
+  font-size: .9rem;
+}
+
+.status {
+  white-space: pre-wrap;
+  border-radius: 9px;
+  background: #eef3f9;
+  padding: 12px;
+}
+
+.bad {
+  background: #fff0ed;
+  color: #a32820;
+}
+
+.good {
+  background: #eaf8f0;
+  color: #176b39;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metric {
+  flex: 1;
+  min-width: 100px;
+  background: #f3f6fa;
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.metric strong {
+  display: block;
+  font-size: 1.25rem;
+}
+
+.compass {
+  width: 145px;
+  height: 145px;
+  border: 3px solid #d5deea;
+  border-radius: 50%;
+  margin: 12px auto;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.compass .needle {
+  font-size: 50px;
+  color: #df4b4b;
+  transform-origin: center;
+  transition: transform .2s;
+}
+
+.compass .north {
+  position: absolute;
+  top: 5px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: .85rem;
+}
+
+th, td {
+  padding: 8px;
+  border-bottom: 1px solid #e3eaf1;
+  text-align: left;
+}
+
+.scroll {
+  overflow: auto;
+}
+
+.hint {
+  line-height: 1.6;
 }
