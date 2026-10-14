@@ -1,92 +1,127 @@
+
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地磁位置資料建立 (管理者端)</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1">
+  <title>地磁資料採集系統</title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-    <div class="container">
-        <h1>🛠️ 建立展物地磁資料</h1>
-        <div id="status" class="status-box">請點擊下方按鈕啟動感測器以讀取當前磁場...</div>
-        
-        <div class="card">
-            <h3>真正磁力計數值（μT，非方向角度）</h3>
-            <p>X 軸: <span id="val-x">0.00</span></p>
-            <p>Y 軸: <span id="val-y">0.00</span></p>
-            <p>Z 軸: <span id="val-z">0.00</span></p>
-        </div>
+<main>
+  <h1>地磁資料採集系統</h1>
+  <p class="muted">
+    真正磁力計 μT · 3 秒採集 · 10 筆批次上傳
+  </p>
 
-        <div class="card" style="text-align: left;">
-            <label>展物編號 (id):</label>
-            <input type="text" id="exhibit-id" placeholder="例如: exhibit_02" style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;">
+  <section class="card">
+    <label for="point">定位點編號</label>
+    <input
+      id="point"
+      inputmode="numeric"
+      placeholder="例如 21"
+      autocomplete="off"
+    >
+    <p class="muted">
+      只需輸入數字，方向及資料編號由程式判斷。
+    </p>
+  </section>
 
-            <label>展物名稱 (name):</label>
-            <input type="text" id="exhibit-name" placeholder="例如: 宋代瓷器" style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;">
+  <section class="card">
+    <h2>即時感測器</h2>
 
-            <label>容許誤差 (tolerance):</label>
-            <input type="number" id="exhibit-tolerance" placeholder="例如: 8（μT）" step="0.1" value="8" style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box;">
-
-            <label>導覽內容 (content):</label>
-            <textarea id="exhibit-content" rows="3" placeholder="請輸入文物的詳細介紹..." style="width:100%; padding:8px; margin:5px 0 15px 0; box-sizing:border-box; resize:vertical; field-sizing:content;"></textarea>
-            <button id="submit-btn" onclick="sendDataToSheet()" style="background-color: #2196F3; margin-top: 10px;">記錄並上傳至試算表</button>
-        </div>
-
-        <button id="start-btn" onclick="requestSensors()">點擊啟動感測器</button>
+    <div class="compass">
+      <span class="north">N</span>
+      <span class="needle" id="needle">▲</span>
     </div>
 
-    <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbzwjQ8iJ4CvFyD8-xZpkH0DjzML8Dz2AR101hW6wxQwQQaYcSs3S6RS5tqN4eq6BpaU-g/exec";
-let sensor = null, latest = null, samples = [];
-const $ = id => document.getElementById(id);
-function status(msg) { $('status').textContent = msg; }
-async function requestSensors() {
-  if (!window.isSecureContext || !('Magnetometer' in window)) {
-    status('此瀏覽器無法讀取真正的磁力計。請使用支援 Magnetometer API 的 Android 瀏覽器，或改用原生 App。');
-    return;
-  }
-  try {
-    sensor = new Magnetometer({frequency: 10});
-    sensor.addEventListener('reading', () => {
-      const v = [sensor.x,sensor.y,sensor.z];
-      if (!v.every(Number.isFinite)) return;
-      latest = v;
-      samples.push(v);
-      if (samples.length > 30) samples.shift();
-      ['x','y','z'].forEach((k,i) => $('val-'+k).textContent = v[i].toFixed(4));
-      onReading(v);
-    });
-    sensor.addEventListener('error', e => status('磁力計讀取失敗：'+(e.error?.message || '權限或硬體不支援')));
-    sensor.start();
-    status('磁力計已啟動，顯示單位為 μT；請保持手機姿態一致。');
-    $('start-btn').disabled = true;
-  } catch (e) { status('無法啟動磁力計：'+e.message); }
-}
-function onReading(v) {}
-function averageSamples() {
-  if (samples.length < 10) return null;
-  return [0,1,2].map(i => Number((samples.reduce((s,v)=>s+v[i],0)/samples.length).toFixed(4)));
-}
+    <p style="text-align:center">
+      <strong id="heading">方向未確認</strong>
+      · <span id="degrees">--°</span>
+    </p>
 
-async function sendDataToSheet() {
-  const id=$('exhibit-id').value.trim(), name=$('exhibit-name').value.trim();
-  const tolerance=Number($('exhibit-tolerance').value);
-  const v=averageSamples();
-  if (!id || !name) return alert('請填寫點位 ID 和名稱');
-  if (!v) return alert('請先啟動磁力計並累積至少 10 筆讀數');
-  if (!Number.isFinite(tolerance) || tolerance<=0) return alert('容許誤差必須大於 0');
-  const data={id,name,wifi_rssi:'',ble_uuid:'',mag_x:v[0],mag_y:v[1],mag_z:v[2],tolerance,content:$('exhibit-content').value, data_type:'magnetometer_uT'};
-  $('submit-btn').disabled=true;
-  status('正在送出磁力計平均值...');
-  try {
-    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(data)});
-    const result=await r.json();
-    if(result.status!=='success') throw Error(result.message || 'API 未成功寫入');
-    status('已寫入 '+id+'；請移動至下一個點位／方位');
-    alert('上傳成功：'+id);
-  } catch(e) {status('上傳失敗：'+e.message);} finally {$('submit-btn').disabled=false;}
-}
-    </script>
+    <p style="text-align:center">
+      預計資料 ID：
+      <strong id="recordId">--</strong>
+    </p>
+
+    <div class="row">
+      <div class="metric">
+        X
+        <strong id="x">--</strong>
+        <small>μT</small>
+      </div>
+
+      <div class="metric">
+        Y
+        <strong id="y">--</strong>
+        <small>μT</small>
+      </div>
+
+      <div class="metric">
+        Z
+        <strong id="z">--</strong>
+        <small>μT</small>
+      </div>
+    </div>
+
+    <p>
+      <button id="startSensors">啟動感測器</button>
+    </p>
+
+    <p class="status" id="sensorStatus">
+      尚未啟動
+    </p>
+
+    <p class="muted hint">
+      請保持手機平放、遠離磁鐵及大型金屬物。
+      方向必須是相對北方的羅盤角度，
+      不能把一般 alpha 旋轉角度直接當方位角。
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>採集資料</h2>
+
+    <p>
+      按一次收集 3 秒，取其中 10 筆有效磁場讀數。
+      採集時請固定手機位置和朝向。
+    </p>
+
+    <button id="collect" disabled>
+      開始採集（3 秒 / 10 筆）
+    </button>
+
+    <button id="upload" class="secondary" disabled>
+      上傳 10 筆
+    </button>
+
+    <p class="status" id="collectStatus">
+      等待感測器啟動
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>方向</th>
+            <th>X μT</th>
+            <th>Y μT</th>
+            <th>Z μT</th>
+            <th>強度 μT</th>
+          </tr>
+        </thead>
+        <tbody id="preview"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script src="magnetometer.js"></script>
+<script src="collector.js"></script>
 </body>
 </html>
